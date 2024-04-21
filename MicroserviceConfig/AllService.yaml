@@ -1,0 +1,689 @@
+# Namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+
+
+# Prometheus
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  serviceAccountName: prometheus
+  serviceMonitorSelector:
+    matchLabels:
+      release: prometheus
+  resources:
+    requests:
+      memory: 400Mi
+  alerting:
+    alertmanagers:
+      - name: alertmanager-main
+        namespace: monitoring
+        port: web
+  ruleSelector:
+    matchLabels:
+      prometheus: k8s
+  securityContext:
+    fsGroup: 2000
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - name: web
+      port: 9090
+      targetPort: web
+
+# Grafana
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_INSTALL_PLUGINS
+              value: "grafana-clock-panel,grafana-simple-json-datasource"
+          volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: grafana-storage
+      volumes:
+        - name: grafana-storage
+          emptyDir: {}
+
+# Grafana Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+# MongoDB Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: example
+
+# MongoDB Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  selector:
+    app: mongo
+  ports:
+    - protocol: TCP
+      port: 27017
+
+# MySQL Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: root
+            - name: MYSQL_USER
+              value: user
+            - name: MYSQL_PASSWORD
+              value: root
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: MYSQL_ROOT_HOST
+              value: "%"
+
+# MySQL Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  selector:
+    app: mysql
+  ports:
+    - protocol: TCP
+      port: 3306
+
+# Zookeeper Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.0.0
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+
+# Zookeeper Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+spec:
+  selector:
+    app: zookeeper
+  ports:
+    - protocol: TCP
+      port: 2181
+
+# Kafka Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-server:7.0.0
+          ports:
+            - name: kafka
+              protocol: TCP
+              containerPort: 9092
+            - name: jmx
+              protocol: TCP
+              containerPort: 9101
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper:2181"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+            - name: KAFKA_METRIC_REPORTERS
+              value: "io.confluent.metrics.reporter.ConfluentMetricsReporter"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_JMX_PORT
+              value: "9101"
+            - name: KAFKA_JMX_HOSTNAME
+              value: "localhost"
+            - name: KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL
+              value: "http://schema-registry:8081"
+            - name: CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS
+              value: "kafka:29092"
+            - name: CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS
+              value: "1"
+            - name: CONFLUENT_METRICS_ENABLE
+              value: "true"
+            - name: CONFLUENT_SUPPORT_CUSTOMER_ID
+              value: "anonymous"
+
+# Kafka Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+    - name: kafka
+      protocol: TCP
+      port: 9092
+      targetPort: 9092
+    - name: jmx
+      protocol: TCP
+      port: 9101
+      targetPort: 9101
+
+# Schema Registry Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      containers:
+        - name: schema-registry
+          image: confluentinc/cp-schema-registry:7.0.0
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SCHEMA_REGISTRY_HOST_NAME
+              value: schema-registry
+            - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
+              value: 'kafka:29092'
+            - name: SCHEMA_REGISTRY_LISTENERS
+              value: 'http://0.0.0.0:8081'
+
+# Schema Registry Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: schema-registry
+spec:
+  selector:
+    app: schema-registry
+  ports:
+    - protocol: TCP
+      port: 8081
+
+# Kafka Connect Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connect
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: connect
+  template:
+    metadata:
+      labels:
+        app: connect
+    spec:
+      containers:
+        - name: connect
+          image: cnfldemos/cp-server-connect-datagen:0.5.0-6.2.0
+          ports:
+            - containerPort: 8083
+          env:
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: 'kafka:29092'
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              value: connect
+            - name: CONNECT_REST_PORT
+              value: "8083"
+            - name: CONNECT_GROUP_ID
+              value: compose-connect-group
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: docker-connect-configs
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_OFFSET_FLUSH_INTERVAL_MS
+              value: "10000"
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: docker-connect-offsets
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: docker-connect-status
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: CONNECT_KEY_CONVERTER
+              value: org.apache.kafka.connect.storage.StringConverter
+            - name: CONNECT_VALUE_CONVERTER
+              value: io.confluent.connect.avro.AvroConverter
+            - name: CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL
+              value: 'http://schema-registry:8081'
+            - name: CLASSPATH
+              value: /usr/share/java/monitoring-interceptors/monitoring-interceptors-7.0.0.jar
+            - name: CONNECT_PRODUCER_INTERCEPTOR_CLASSES
+              value: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+            - name: CONNECT_CONSUMER_INTERCEPTOR_CLASSES
+              value: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+            - name: CONNECT_ZOOKEEPER_CONNECT
+              value: 'zookeeper:2181'
+            - name: CONNECT_PLUGIN_PATH
+              value: /kafka/connectors
+            - name: CONNECT_LOG4J_LOGGERS
+              value: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
+
+# Kafka Connect Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: connect
+spec:
+  selector:
+    app: connect
+  ports:
+    - protocol: TCP
+      port: 8083
+
+# Control Center Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-center
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-center
+  template:
+    metadata:
+      labels:
+        app: control-center
+    spec:
+      containers:
+        - name: control-center
+          image: confluentinc/cp-enterprise-control-center:7.0.0
+          ports:
+            - containerPort: 9021
+          env:
+            - name: CONTROL_CENTER_BOOTSTRAP_SERVERS
+              value: 'kafka:29092'
+            - name: CONTROL_CENTER_CONNECT_CONNECT-DEFAULT_CLUSTER
+              value: 'connect:8083'
+            - name: CONTROL_CENTER_KSQL_KSQLDB1_URL
+              value: "http://ksqldb-server:8088"
+            - name: CONTROL_CENTER_KSQL_KSQLDB1_ADVERTISED_URL
+              value: "http://localhost:8088"
+            - name: CONTROL_CENTER_SCHEMA_REGISTRY_URL
+              value: "http://schema-registry:8081"
+            - name: CONTROL_CENTER_REPLICATION_FACTOR
+              value: "1"
+            - name: CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS
+              value: "1"
+            - name: CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS
+              value: "1"
+            - name: CONFLUENT_METRICS_TOPIC_REPLICATION
+              value: "1"
+            - name: PORT
+              value: "9021"
+
+# Control Center Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-center
+spec:
+  selector:
+    app: control-center
+  ports:
+    - protocol: TCP
+      port: 9021
+
+# KSQLDB Server Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ksqldb-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ksqldb-server
+  template:
+    metadata:
+      labels:
+        app: ksqldb-server
+    spec:
+      containers:
+        - name: ksqldb-server
+          image: confluentinc/cp-ksqldb-server:7.0.0
+          ports:
+            - containerPort: 8088
+          env:
+            - name: KSQL_CONFIG_DIR
+              value: "/etc/ksql"
+            - name: KSQL_BOOTSTRAP_SERVERS
+              value: "kafka:29092"
+            - name: KSQL_HOST_NAME
+              value: ksqldb-server
+            - name: KSQL_LISTENERS
+              value: "http://0.0.0.0:8088"
+            - name: KSQL_CACHE_MAX_BYTES_BUFFERING
+              value: "0"
+            - name: KSQL_KSQL_SCHEMA_REGISTRY_URL
+              value: "http://schema-registry:8081"
+            - name: KSQL_PRODUCER_INTERCEPTOR_CLASSES
+              value: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
+            - name: KSQL_CONSUMER_INTERCEPTOR_CLASSES
+              value: "io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor"
+            - name: CLASSPATH
+              value: /usr/share/java/monitoring-interceptors/monitoring-interceptors-7.0.0.jar
+
+# KSQLDB Server Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ksqldb-server
+spec:
+  selector:
+    app: ksqldb-server
+  ports:
+    - protocol: TCP
+      port: 8088
+
+# Postgres Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              value: example
+            - name: POSTGRES_DB
+              value: userdb
+
+# Postgres Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+
+# Redis Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis
+          ports:
+            - containerPort: 6379
+
+# Redis Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+
+# Alert Manager Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.23.0
+          args:
+            - "--config.file=/etc/config/alertmanager.yml"
+            - "--storage.path=/data"
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config-volume
+          configMap:
+            name: alertmanager-config
+        - name: data
+          emptyDir: {}
+
+# Alert Manager Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - protocol: TCP
+      port: 9093
+
+# Alert Manager ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+      receiver: 'slack-webhook'
+    receivers:
+      - name: 'slack-webhook'
+        slack_configs:
+          - channel: '#alerts'
+            send_resolved: true
+            username: 'Prometheus'
+            title: '[{{ .Status | toUpper }}] {{ .CommonLabels.job }} alert'
+            text: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}\n{{ .CommonAnnotations.runbook_url }}"

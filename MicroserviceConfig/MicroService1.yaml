@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  spring-boot-app:
+    image: my-image-name
+    ports:
+      - "8086:8086"
+    environment:
+      - spring_application_name=MicroService1
+      - server_port=8086
+      - spring_datasource_url=jdbc:mysql://mysql:3306/project?serverTimezone=UTC
+      - spring_datasource_username=user
+      - spring_datasource_password=root
+      - spring_jpa_hibernate_ddl_auto=none
+      - spring_jpa_database_platform=org.hibernate.dialect.MySQLDialect
+    volumes:
+      - /tmp
